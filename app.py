@@ -45,12 +45,11 @@ if st.button("🔧 Processar"):
 nf_mp = {}
 
     for linha in linhas_nf:
-    linha = linha.strip()
+        linha = linha.strip()
 
     # linha precisa começar com código da MP
     if re.match(r"^\d{4,5}\s", linha):
         partes = linha.split()
-
         codigo_mp = partes[0]
 
         # pegar todos os valores decimais da linha
