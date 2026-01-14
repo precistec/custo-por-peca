@@ -13,7 +13,10 @@ nf_file = st.file_uploader("🧾 Nota Fiscal (PDF ou XML)", type=["xlsx", "xls",
 # ---------- FUNÇÕES ----------
 def extrair_numero(texto):
     nums = re.findall(r"\d+,\d+|\d+\.\d+|\d+", texto)
-    return float(nums[-1].replace(",", ".")) if nums else 0
+    if not nums:
+        return 0
+    valores = [float(n.replace(",", ".")) for n in nums]
+    return max(valores)
 
 def limpar_linhas(linhas):
     return [l for l in linhas if re.search(r"\d{4,}", l)]
