@@ -68,10 +68,9 @@ if st.button("🔧 Processar"):
             prod_match = re.search(r"\b\d{4,}\b", linha_prod)
             mp_match = re.search(r"\(M\)\s*(\d{4,})", linha_mp)
 
-            try:
-                qtd_pecas = int(linha_qtd)
-            except:
-                qtd_pecas = 0
+            nums_qtd = re.findall(r"\d+", linha_qtd)
+            qtd_pecas = int(nums_qtd[-1]) if nums_qtd else 0
+
 
             consumos = re.findall(r"\d+,\d+", linha_mp)
 
