@@ -25,40 +25,30 @@ if st.button("🔧 Processar"):
         st.error("Envie os dois arquivos.")
         st.stop()
 
+    # =============================
+    # EXTRAIR TEXTO DOS PDFS
+    # =============================
     linhas_nf = extrair_linhas(nf_file)
     linhas_req = extrair_linhas(req_file)
 
-    st.subheader("DEBUG – NF COMPLETA (linhas 40 a 120)")
+    st.subheader("DEBUG – NF (linhas 40 a 120)")
     st.write(linhas_nf[40:120])
 
-for linha in linhas_nf:
-        # Exemplo esperado: 14592 ... 0,130 ... 5,34
-# =============================
-# EXTRAIR ITENS DA NOTA FISCAL
-# =============================
+    # =============================
+    # 1. EXTRAIR ITENS DA NOTA FISCAL
+    # =============================
     nf_mp = {}
 
     for linha in linhas_nf:
         linha = linha.strip()
 
-    # linha precisa começar com código da MP
-    if re.match(r"^\d{4,5}\s", linha):
-        partes = linha.split()
-        codigo_mp = partes[0]
+        if re.match(r"^\d{4,5}\s", linha):
+            valores = re.findall(r"\d+,\d+", linha)
 
-        # pegar todos os valores decimais da linha
-        valores = re.findall(r"\d+,\d+", linha)
-
-        # precisa ter pelo menos quantidade, unitário e total
-        if len(valores) >= 3:
-            valor_total = float(valores[-1].replace(",", "."))
-            nf_mp[codigo_mp] = valor_total
-
-
-        if cod and len(valores) >= 2:
-            codigo_mp = cod[0]
-            valor_total = float(valores[-1].replace(",", "."))
-            nf_mp[codigo_mp] = valor_total
+            if len(valores) >= 3:
+                codigo_mp = linha.split()[0]
+                valor_total = float(valores[-1].replace(",", "."))
+                nf_mp[codigo_mp] = valor_total
 
     # =============================
     # 2. EXTRAIR REQUISIÇÃO
@@ -66,7 +56,7 @@ for linha in linhas_nf:
     requisicao = []
     i = 0
 
-    while i < len(linhas_req) - 3:
+    while i < len(linhas_req) - 2:
         linha_prod = linhas_req[i]
         linha_qtd = linhas_req[i + 1]
         linha_mp = linhas_req[i + 2]
@@ -92,14 +82,14 @@ for linha in linhas_nf:
             i += 1
 
     # =============================
-    # 3. RATEIO DA MP
+    # 3. SOMAR CONSUMO POR MP
     # =============================
     consumo_total = defaultdict(float)
     for item in requisicao:
         consumo_total[item["mp"]] += item["consumo"]
 
     # =============================
-    # 4. CÁLCULO FINAL
+    # 4. CÁLCULO DO PREÇO POR PEÇA
     # =============================
     resultado = []
 
@@ -122,6 +112,7 @@ for linha in linhas_nf:
         })
 
     df = pd.DataFrame(resultado)
+
     st.success("Processamento concluído")
     st.dataframe(df)
 
