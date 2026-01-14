@@ -29,12 +29,12 @@ if st.button("🔧 Processar"):
     linhas_req = extrair_linhas(req_file)
 
     # =============================
-    # 1. EXTRAIR MATÉRIA-PRIMA DA NF
+    # 1. LER MATÉRIA-PRIMA DA NF
     # =============================
     nf_mp = defaultdict(float)
 
     for linha in linhas_nf:
-        linha = linha.strip()
+        linha = linha.replace(".", "").strip()
 
         # Linha começa com código numérico
         if re.match(r"^\d{2,5}\s", linha):
@@ -46,28 +46,27 @@ if st.button("🔧 Processar"):
                 nf_mp[codigo] += valor_total
 
     # =============================
-    # 2. EXTRAIR REQUISIÇÃO
+    # 2. LER REQUISIÇÃO
     # =============================
     itens = []
     i = 0
 
     while i < len(linhas_req) - 2:
-        linha_prod = linhas_req[i]
-        linha_qtd = linhas_req[i + 1]
-        linha_mp = linhas_req[i + 2]
+        prod = linhas_req[i]
+        qtd = linhas_req[i + 1]
+        mp = linhas_req[i + 2]
 
-        if "PRODUTO INTERMEDIÁRIO" in linha_prod and "MATÉRIA-PRIMA" in linha_mp:
+        if "PRODUTO INTERMEDIÁRIO" in prod and "MATÉRIA-PRIMA" in mp:
+            cod_prod = re.findall(r"\b\d{4,5}\b", prod)
+            cod_mp = re.findall(r"\b\d{2,5}\b", mp)
+            qtd_prod = re.findall(r"\b\d+\b", qtd)
 
-            prod_codigo = re.findall(r"\b\d{4,5}\b", linha_prod)
-            mp_codigo = re.findall(r"\b\d{2,5}\b", linha_mp)
-            qtd = re.findall(r"\b\d+\b", linha_qtd)
-
-            if prod_codigo and mp_codigo and qtd:
+            if cod_prod and cod_mp and qtd_prod:
                 itens.append({
-                    "produto": prod_codigo[0],
-                    "mp": mp_codigo[0],
-                    "qtd": int(qtd[0]),
-                    "linha_mp": linha_mp
+                    "produto": cod_prod[0],
+                    "mp": cod_mp[0],
+                    "qtd": int(qtd_prod[0]),
+                    "linha_mp": mp
                 })
                 i += 3
             else:
@@ -76,7 +75,7 @@ if st.button("🔧 Processar"):
             i += 1
 
     # =============================
-    # 3. CÁLCULO FINAL
+    # 3. CÁLCULO FINAL (SIMPLES)
     # =============================
     resultado = []
 
@@ -100,18 +99,15 @@ if st.button("🔧 Processar"):
             "Preço por Peça": preco
         })
 
-    # =============================
-    # 4. SAÍDA
-    # =============================
     df = pd.DataFrame(resultado)
 
-    st.success("Processamento concluído com sucesso")
+    st.success("Processamento concluído corretamente")
     st.dataframe(df)
 
     st.download_button(
-        label="⬇️ Baixar CSV",
-        data=df.to_csv(index=False, sep=";").encode("utf-8"),
-        file_name="custo_por_peca.csv",
-        mime="text/csv",
-        key="download_csv_unico"
+        "⬇️ Baixar CSV",
+        df.to_csv(index=False, sep=";").encode("utf-8"),
+        "custo_por_peca.csv",
+        "text/csv",
+        key="download_unico"
     )
