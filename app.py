@@ -41,23 +41,26 @@ nf_mp = {}
 for linha in linhas_nf:
     linha = linha.strip()
 
-    # só aceita linhas de MATÉRIA-PRIMA (unidade M)
-    if re.match(r"^\d{4,5}\s", linha) and " M " in linha:
+    # começa com código numérico
+    if re.match(r"^\d{4,5}\s", linha):
 
+        # extrai números com vírgula
         valores = re.findall(r"\d+,\d+", linha)
 
-        # precisa ter quantidade, unitário e total
+        # matéria-prima sempre tem pelo menos 3 valores:
+        # quantidade, unitário e total
         if len(valores) >= 3:
             codigo_mp = linha.split()[0]
 
-            # VALOR TOTAL é o terceiro número
+            # VALOR TOTAL = terceiro número decimal
             valor_total = float(valores[2].replace(",", "."))
 
-            # soma se aparecer mais de uma vez
+            # soma se repetir
             if codigo_mp in nf_mp:
                 nf_mp[codigo_mp] += valor_total
             else:
                 nf_mp[codigo_mp] = valor_total
+
 
              
 
