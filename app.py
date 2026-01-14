@@ -98,11 +98,11 @@ if st.button("🔧 Processar"):
             preco = "Não consta na NF"
         else:
             # se a MP só aparece em um produto, não rateia
-if consumo_total[mp] == item["consumo"]:
-    preco = round(nf_mp[mp] / item["qtd"], 3)
-else:
-    rateio = (item["consumo"] / consumo_total[mp]) * nf_mp[mp]
-    preco = round(rateio / item["qtd"], 3)
+            if consumo_total[mp] == item["consumo"]:
+                preco = round(nf_mp[mp] / item["qtd"], 3)
+            else:
+                rateio = (item["consumo"] / consumo_total[mp]) * nf_mp[mp]
+                preco = round(rateio / item["qtd"], 3)
 
 
         resultado.append({
