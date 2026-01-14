@@ -29,28 +29,21 @@ if st.button("🔧 Processar"):
     linhas_req = extrair_linhas(req_file)
 
     # =============================
-    # 1. LER MATÉRIA-PRIMA DA NF
+    # 1. LER NOTA FISCAL (MP)
     # =============================
-  nf_mp = {}
+    nf_mp = defaultdict(float)
 
-for linha in linhas_nf:
-    linha = linha.strip()
+    for linha in linhas_nf:
+        linha = linha.strip()
 
-    # linha começa com código numérico
-    if re.match(r"^\d{2,5}\s", linha):
+        # Linha começa com código numérico
+        if re.match(r"^\d{2,5}\s", linha):
+            valores = re.findall(r"\d+,\d+", linha)
 
-        valores = re.findall(r"\d+,\d+", linha)
-
-        # último valor é o TOTAL da MP
-        if len(valores) >= 1:
-            codigo = linha.split()[0]
-            valor_total = float(valores[-1].replace(",", "."))
-
-            if codigo in nf_mp:
-                nf_mp[codigo] += valor_total
-            else:
-                nf_mp[codigo] = valor_total
-
+            if valores:
+                codigo_mp = linha.split()[0]
+                valor_total = float(valores[-1].replace(",", "."))
+                nf_mp[codigo_mp] += valor_total
 
     # =============================
     # 2. LER REQUISIÇÃO
@@ -59,21 +52,21 @@ for linha in linhas_nf:
     i = 0
 
     while i < len(linhas_req) - 2:
-        prod = linhas_req[i]
-        qtd = linhas_req[i + 1]
-        mp = linhas_req[i + 2]
+        linha_prod = linhas_req[i]
+        linha_qtd = linhas_req[i + 1]
+        linha_mp = linhas_req[i + 2]
 
-        if "PRODUTO INTERMEDIÁRIO" in prod and "MATÉRIA-PRIMA" in mp:
-            cod_prod = re.findall(r"\b\d{4,5}\b", prod)
-            cod_mp = re.findall(r"\b\d{2,5}\b", mp)
-            qtd_prod = re.findall(r"\b\d+\b", qtd)
+        if "PRODUTO INTERMEDIÁRIO" in linha_prod and "MATÉRIA-PRIMA" in linha_mp:
+            cod_prod = re.findall(r"\b\d{4,5}\b", linha_prod)
+            cod_mp = re.findall(r"\b\d{2,5}\b", linha_mp)
+            qtd = re.findall(r"\b\d+\b", linha_qtd)
 
-            if cod_prod and cod_mp and qtd_prod:
+            if cod_prod and cod_mp and qtd:
                 itens.append({
                     "produto": cod_prod[0],
                     "mp": cod_mp[0],
-                    "qtd": int(qtd_prod[0]),
-                    "linha_mp": mp
+                    "qtd": int(qtd[0]),
+                    "linha_mp": linha_mp
                 })
                 i += 3
             else:
@@ -82,7 +75,7 @@ for linha in linhas_nf:
             i += 1
 
     # =============================
-    # 3. CÁLCULO FINAL (SIMPLES)
+    # 3. CÁLCULO FINAL
     # =============================
     resultado = []
 
@@ -90,9 +83,9 @@ for linha in linhas_nf:
         produto = item["produto"]
         mp = item["mp"]
         qtd = item["qtd"]
-        linha_mp = item["linha_mp"]
+        linha_mp = item["linha_mp"].upper()
 
-        if "ALMOXARIFADO" in linha_mp.upper():
+        if "ALMOXARIFADO" in linha_mp:
             preco = "ALMOXARIFADO"
 
         elif mp not in nf_mp:
@@ -108,13 +101,13 @@ for linha in linhas_nf:
 
     df = pd.DataFrame(resultado)
 
-    st.success("Processamento concluído corretamente")
+    st.success("Processamento concluído")
     st.dataframe(df)
 
     st.download_button(
-        "⬇️ Baixar CSV",
-        df.to_csv(index=False, sep=";").encode("utf-8"),
-        "custo_por_peca.csv",
-        "text/csv",
-        key="download_unico"
+        label="⬇️ Baixar CSV",
+        data=df.to_csv(index=False, sep=";").encode("utf-8"),
+        file_name="custo_por_peca.csv",
+        mime="text/csv",
+        key="download_custo"
     )
