@@ -31,19 +31,26 @@ if st.button("🔧 Processar"):
     # =============================
     # 1. LER MATÉRIA-PRIMA DA NF
     # =============================
-    nf_mp = defaultdict(float)
+  nf_mp = {}
 
-    for linha in linhas_nf:
-        linha = linha.replace(".", "").strip()
+for linha in linhas_nf:
+    linha = linha.strip()
 
-        # Linha começa com código numérico
-        if re.match(r"^\d{2,5}\s", linha):
-            valores = re.findall(r"\d+,\d+", linha)
+    # linha começa com código numérico
+    if re.match(r"^\d{2,5}\s", linha):
 
-            if len(valores) >= 3:
-                codigo = linha.split()[0]
-                valor_total = float(valores[-1].replace(",", "."))
+        valores = re.findall(r"\d+,\d+", linha)
+
+        # último valor é o TOTAL da MP
+        if len(valores) >= 1:
+            codigo = linha.split()[0]
+            valor_total = float(valores[-1].replace(",", "."))
+
+            if codigo in nf_mp:
                 nf_mp[codigo] += valor_total
+            else:
+                nf_mp[codigo] = valor_total
+
 
     # =============================
     # 2. LER REQUISIÇÃO
