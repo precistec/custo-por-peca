@@ -39,8 +39,28 @@ if st.button("🔧 Processar"):
 
     for linha in linhas_nf:
         # Exemplo esperado: 14592 ... 0,130 ... 5,34
-        cod = re.findall(r"\b\d{4,}\b", linha)
+# =============================
+# EXTRAIR ITENS DA NOTA FISCAL
+# =============================
+nf_mp = {}
+
+for linha in linhas_nf:
+    linha = linha.strip()
+
+    # linha precisa começar com código da MP
+    if re.match(r"^\d{4,5}\s", linha):
+        partes = linha.split()
+
+        codigo_mp = partes[0]
+
+        # pegar todos os valores decimais da linha
         valores = re.findall(r"\d+,\d+", linha)
+
+        # precisa ter pelo menos quantidade, unitário e total
+        if len(valores) >= 3:
+            valor_total = float(valores[-1].replace(",", "."))
+            nf_mp[codigo_mp] = valor_total
+
 
         if cod and len(valores) >= 2:
             codigo_mp = cod[0]
