@@ -28,6 +28,10 @@ if st.button("🔧 Processar"):
     linhas_nf = extrair_linhas(nf_file)
     linhas_req = extrair_linhas(req_file)
 
+    st.subheader("DEBUG – NF COMPLETA (linhas 40 a 120)")
+    st.write(linhas_nf[40:120])
+
+
     # =============================
     # 1. EXTRAIR ITENS DA NF (MP)
     # =============================
