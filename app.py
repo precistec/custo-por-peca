@@ -4,15 +4,17 @@ import pandas as pd
 import re
 from collections import defaultdict
 
-st.set_page_config(page_title="Custo por Peça", layout="centered")
-st.title("Cálculo de Custo por Peça (PDF ou Excel/CSV)")
+st.set_page_config(page_title="Custo por Peça (PDF/CSV/XLS)", layout="centered")
+st.title("Cálculo de Custo por Peça")
 
-# Aceita PDF, XLSX, XLS e CSV
-nf_file = st.file_uploader("📄 Nota Fiscal (PDF ou Excel/CSV)", type=["pdf", "xlsx", "xls", "csv"])
-req_file = st.file_uploader("📄 Requisição (PDF ou Excel/CSV)", type=["pdf", "xlsx", "xls", "csv"])
+# Aceita PDF, XLS, XLSX, CSV
+nf_file = st.file_uploader("📄 Nota Fiscal (PDF, CSV ou Excel)", type=["pdf", "csv", "xlsx", "xls"])
+req_file = st.file_uploader("📄 Requisição (PDF, CSV ou Excel)", type=["pdf", "csv", "xlsx", "xls"])
 
+# =========================
+# Funções auxiliares
+# =========================
 def extrair_linhas_pdf(pdf):
-    """Extrai texto de PDF linha a linha"""
     linhas = []
     with pdfplumber.open(pdf) as p:
         for page in p.pages:
@@ -22,7 +24,6 @@ def extrair_linhas_pdf(pdf):
     return linhas
 
 def ler_nota_fiscal(file):
-    """Retorna um dicionário: codigo_mp -> valor_total"""
     nf_mp = defaultdict(float)
 
     if file.name.endswith(".pdf"):
@@ -35,15 +36,26 @@ def ler_nota_fiscal(file):
                 codigo_atual = match_codigo.group(1)
             valores = re.findall(r"\d+,\d{2}", linha)
             if codigo_atual and valores:
-                valor = float(valores[-1].replace(",", "."))
-                nf_mp[codigo_atual] += valor
-                codigo_atual = None
-    else:  # Excel/CSV
-        if file.name.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(file)
-        else:
-            df = pd.read_csv(file)
+                try:
+                    valor = float(valores[-1].replace(",", "."))
+                    nf_mp[codigo_atual] += valor
+                    codigo_atual = None
+                except:
+                    continue
+    else:  # CSV ou Excel
+        try:
+            if file.name.endswith((".xlsx", ".xls")):
+                df = pd.read_excel(file)
+            else:
+                df = pd.read_csv(file, sep=None, engine='python', encoding='utf-8')
+        except Exception:
+            df = pd.read_csv(file, sep=None, engine='python', encoding='ISO-8859-1')
+
         df = df.rename(columns=lambda x: x.strip())
+        if 'Código' not in df.columns or 'Valor Total' not in df.columns:
+            st.error("A Nota Fiscal precisa ter colunas: Código e Valor Total")
+            st.stop()
+
         for idx, row in df.iterrows():
             codigo = str(row['Código']).strip()
             valor_total = float(row['Valor Total'])
@@ -52,8 +64,8 @@ def ler_nota_fiscal(file):
     return nf_mp
 
 def ler_requisicao(file):
-    """Retorna lista de itens da requisição: produto, mp, qtd, linha_mp"""
     itens = []
+
     if file.name.endswith(".pdf"):
         linhas = extrair_linhas_pdf(file)
         i = 0
@@ -77,12 +89,20 @@ def ler_requisicao(file):
                     i += 1
             else:
                 i += 1
-    else:  # Excel/CSV
-        if file.name.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(file)
-        else:
-            df = pd.read_csv(file)
+    else:  # CSV ou Excel
+        try:
+            if file.name.endswith((".xlsx", ".xls")):
+                df = pd.read_excel(file)
+            else:
+                df = pd.read_csv(file, sep=None, engine='python', encoding='utf-8')
+        except Exception:
+            df = pd.read_csv(file, sep=None, engine='python', encoding='ISO-8859-1')
+
         df = df.rename(columns=lambda x: x.strip())
+        for col in ['Produto', 'Qtd', 'MP']:
+            if col not in df.columns:
+                st.error(f"A Requisição precisa ter a coluna: {col}")
+                st.stop()
         for idx, row in df.iterrows():
             itens.append({
                 "produto": str(row['Produto']),
@@ -92,27 +112,24 @@ def ler_requisicao(file):
             })
     return itens
 
+# =========================
+# Processamento
+# =========================
 if st.button("🔧 Processar"):
 
     if not nf_file or not req_file:
-        st.error("Envie ambos os arquivos")
+        st.error("Envie ambos os arquivos.")
         st.stop()
 
-    # =============================
-    # Ler NF
-    # =============================
+    # Ler Nota Fiscal
     nf_mp = ler_nota_fiscal(nf_file)
     st.subheader("DEBUG – Matérias-primas da NF")
     st.write(dict(nf_mp))
 
-    # =============================
     # Ler Requisição
-    # =============================
     itens = ler_requisicao(req_file)
 
-    # =============================
     # Calcular preço por peça
-    # =============================
     resultado = []
     for item in itens:
         produto = item["produto"]
