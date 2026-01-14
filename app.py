@@ -52,7 +52,8 @@ if st.button("🔧 Processar"):
                 
         if codigo_mp in nf_mp:
             nf_mp[codigo_mp] += valor_total
-else:
+            
+    else:
     nf_mp[codigo_mp] = valor_total
     nf_mp[codigo_mp] = valor_total
 
