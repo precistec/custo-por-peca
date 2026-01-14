@@ -2,7 +2,6 @@ import streamlit as st
 import pdfplumber
 import pandas as pd
 import re
-from collections import defaultdict
 
 st.set_page_config(page_title="Custo por Peça", layout="centered")
 st.title("Cálculo de Custo por Peça")
@@ -22,51 +21,60 @@ def extrair_linhas(pdf):
 if st.button("🔧 Processar"):
 
     if not nf_file or not req_file:
-        st.error("Envie a Nota Fiscal e a Requisição.")
+        st.error("Envie os dois arquivos.")
         st.stop()
 
     linhas_nf = extrair_linhas(nf_file)
     linhas_req = extrair_linhas(req_file)
 
     # =============================
-    # 1. LER NOTA FISCAL (MP)
+    # 1. NOTA FISCAL – MP
     # =============================
-    nf_mp = defaultdict(float)
+    nf_mp = {}
 
     for linha in linhas_nf:
         linha = linha.strip()
 
-        # Linha começa com código numérico
+        # linha começa com código
         if re.match(r"^\d{2,5}\s", linha):
-            valores = re.findall(r"\d+,\d+", linha)
+            partes = linha.split()
 
-            if valores:
-                codigo_mp = linha.split()[0]
-                valor_total = float(valores[-1].replace(",", "."))
-                nf_mp[codigo_mp] += valor_total
+            # última coluna TEM que ser valor total
+            ultimo = partes[-1]
+
+            if "," in ultimo:
+                try:
+                    codigo = partes[0]
+                    valor_total = float(ultimo.replace(".", "").replace(",", "."))
+                    nf_mp[codigo] = nf_mp.get(codigo, 0) + valor_total
+                except:
+                    pass
+
+    st.subheader("DEBUG – Matérias-primas encontradas na NF")
+    st.write(nf_mp)
 
     # =============================
-    # 2. LER REQUISIÇÃO
+    # 2. REQUISIÇÃO
     # =============================
     itens = []
     i = 0
 
     while i < len(linhas_req) - 2:
-        linha_prod = linhas_req[i]
-        linha_qtd = linhas_req[i + 1]
-        linha_mp = linhas_req[i + 2]
+        p = linhas_req[i]
+        q = linhas_req[i + 1]
+        m = linhas_req[i + 2]
 
-        if "PRODUTO INTERMEDIÁRIO" in linha_prod and "MATÉRIA-PRIMA" in linha_mp:
-            cod_prod = re.findall(r"\b\d{4,5}\b", linha_prod)
-            cod_mp = re.findall(r"\b\d{2,5}\b", linha_mp)
-            qtd = re.findall(r"\b\d+\b", linha_qtd)
+        if "PRODUTO INTERMEDIÁRIO" in p and "MATÉRIA-PRIMA" in m:
+            cod_prod = re.findall(r"\b\d{4,5}\b", p)
+            cod_mp = re.findall(r"\b\d{2,5}\b", m)
+            qtd = re.findall(r"\b\d+\b", q)
 
             if cod_prod and cod_mp and qtd:
                 itens.append({
                     "produto": cod_prod[0],
                     "mp": cod_mp[0],
                     "qtd": int(qtd[0]),
-                    "linha_mp": linha_mp
+                    "linha_mp": m.upper()
                 })
                 i += 3
             else:
@@ -75,7 +83,7 @@ if st.button("🔧 Processar"):
             i += 1
 
     # =============================
-    # 3. CÁLCULO FINAL
+    # 3. CÁLCULO
     # =============================
     resultado = []
 
@@ -83,14 +91,12 @@ if st.button("🔧 Processar"):
         produto = item["produto"]
         mp = item["mp"]
         qtd = item["qtd"]
-        linha_mp = item["linha_mp"].upper()
+        linha_mp = item["linha_mp"]
 
         if "ALMOXARIFADO" in linha_mp:
             preco = "ALMOXARIFADO"
-
         elif mp not in nf_mp:
             preco = "Não consta na NF"
-
         else:
             preco = round(nf_mp[mp] / qtd, 4)
 
@@ -101,13 +107,12 @@ if st.button("🔧 Processar"):
 
     df = pd.DataFrame(resultado)
 
-    st.success("Processamento concluído")
+    st.subheader("Resultado Final")
     st.dataframe(df)
 
     st.download_button(
-        label="⬇️ Baixar CSV",
-        data=df.to_csv(index=False, sep=";").encode("utf-8"),
-        file_name="custo_por_peca.csv",
-        mime="text/csv",
-        key="download_custo"
+        "⬇️ Baixar CSV",
+        df.to_csv(index=False, sep=";").encode("utf-8"),
+        "custo_por_peca.csv",
+        "text/csv"
     )
