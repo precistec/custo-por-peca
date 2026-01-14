@@ -10,7 +10,6 @@ st.title("Cálculo de Custo por Peça")
 nf_file = st.file_uploader("📄 Nota Fiscal (PDF)", type="pdf")
 req_file = st.file_uploader("📄 Requisição (PDF)", type="pdf")
 
-
 def extrair_linhas(pdf):
     linhas = []
     with pdfplumber.open(pdf) as p:
@@ -20,66 +19,55 @@ def extrair_linhas(pdf):
                 linhas.extend(texto.split("\n"))
     return linhas
 
-
 if st.button("🔧 Processar"):
 
     if not nf_file or not req_file:
-        st.error("Envie os dois arquivos.")
+        st.error("Envie a Nota Fiscal e a Requisição.")
         st.stop()
 
     linhas_nf = extrair_linhas(nf_file)
     linhas_req = extrair_linhas(req_file)
 
-    # ======================================================
-    # 1. LER NOTA FISCAL → SOMAR VALOR TOTAL POR MP
-    # ======================================================
-    nf_mp = {}
+    # =============================
+    # 1. EXTRAIR MATÉRIA-PRIMA DA NF
+    # =============================
+    nf_mp = defaultdict(float)
 
     for linha in linhas_nf:
         linha = linha.strip()
 
-        # começa com código numérico
-        if re.match(r"^\d{4,5}\s", linha):
+        # Linha começa com código numérico
+        if re.match(r"^\d{2,5}\s", linha):
             valores = re.findall(r"\d+,\d+", linha)
 
-            # precisa ter quantidade, unitário e total
             if len(valores) >= 3:
-                codigo_mp = linha.split()[0]
-                valor_total = float(valores[2].replace(",", "."))
+                codigo = linha.split()[0]
+                valor_total = float(valores[-1].replace(",", "."))
+                nf_mp[codigo] += valor_total
 
-                if codigo_mp in nf_mp:
-                    nf_mp[codigo_mp] += valor_total
-                else:
-                    nf_mp[codigo_mp] = valor_total
-
-    # ======================================================
-    # 2. LER REQUISIÇÃO (PRODUTO / QTD / MP / CONSUMO)
-    # ======================================================
-    requisicao = []
+    # =============================
+    # 2. EXTRAIR REQUISIÇÃO
+    # =============================
+    itens = []
     i = 0
 
     while i < len(linhas_req) - 2:
-        linha_prod = linhas_req[i].strip()
-        linha_qtd = linhas_req[i + 1].strip()
-        linha_mp = linhas_req[i + 2].strip()
+        linha_prod = linhas_req[i]
+        linha_qtd = linhas_req[i + 1]
+        linha_mp = linhas_req[i + 2]
 
         if "PRODUTO INTERMEDIÁRIO" in linha_prod and "MATÉRIA-PRIMA" in linha_mp:
 
-            prod_match = re.search(r"\b\d{4,}\b", linha_prod)
-            mp_match = re.search(r"\(M\)\s*(\d{4,})", linha_mp)
+            prod_codigo = re.findall(r"\b\d{4,5}\b", linha_prod)
+            mp_codigo = re.findall(r"\b\d{2,5}\b", linha_mp)
+            qtd = re.findall(r"\b\d+\b", linha_qtd)
 
-            nums_qtd = re.findall(r"\d+", linha_qtd)
-            qtd_pecas = int(nums_qtd[-1]) if nums_qtd else 0
-
-
-            consumos = re.findall(r"\d+,\d+", linha_mp)
-
-            if prod_match and mp_match and qtd_pecas > 0 and consumos:
-                requisicao.append({
-                    "produto": prod_match.group(0),
-                    "mp": mp_match.group(1),
-                    "qtd": qtd_pecas,
-                    "consumo": float(consumos[-1].replace(",", "."))
+            if prod_codigo and mp_codigo and qtd:
+                itens.append({
+                    "produto": prod_codigo[0],
+                    "mp": mp_codigo[0],
+                    "qtd": int(qtd[0]),
+                    "linha_mp": linha_mp
                 })
                 i += 3
             else:
@@ -87,51 +75,43 @@ if st.button("🔧 Processar"):
         else:
             i += 1
 
-    # ======================================================
-    # 3. SOMAR CONSUMO TOTAL POR MATÉRIA-PRIMA
-    # ======================================================
-    consumo_total = defaultdict(float)
-
-    for item in requisicao:
-        consumo_total[item["mp"]] += item["consumo"]
-
-    # ======================================================
-    # 4. CALCULAR PREÇO POR PEÇA
-    # ======================================================
+    # =============================
+    # 3. CÁLCULO FINAL
+    # =============================
     resultado = []
 
-    for item in requisicao:
+    for item in itens:
         produto = item["produto"]
         mp = item["mp"]
         qtd = item["qtd"]
-        consumo = item["consumo"]
+        linha_mp = item["linha_mp"]
 
-        if mp not in nf_mp:
+        if "ALMOXARIFADO" in linha_mp.upper():
+            preco = "ALMOXARIFADO"
+
+        elif mp not in nf_mp:
             preco = "Não consta na NF"
-        else:
-            valor_total_mp = nf_mp[mp]
 
-            # MP usada em apenas um produto
-            if consumo_total[mp] == consumo:
-                preco = round(valor_total_mp / qtd, 3)
-            else:
-                rateio = (consumo / consumo_total[mp]) * valor_total_mp
-                preco = round(rateio / qtd, 3)
+        else:
+            preco = round(nf_mp[mp] / qtd, 4)
 
         resultado.append({
             "Código do Produto": produto,
             "Preço por Peça": preco
         })
 
+    # =============================
+    # 4. SAÍDA
+    # =============================
     df = pd.DataFrame(resultado)
 
-    st.success("Processamento concluído")
+    st.success("Processamento concluído com sucesso")
     st.dataframe(df)
 
     st.download_button(
         label="⬇️ Baixar CSV",
-        data=df.to_csv(index=False).encode("utf-8"),
+        data=df.to_csv(index=False, sep=";").encode("utf-8"),
         file_name="custo_por_peca.csv",
         mime="text/csv",
-        key="download_csv_final"
+        key="download_csv_unico"
     )
