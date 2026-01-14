@@ -137,9 +137,11 @@ for linha in linhas_nf:
     st.success("Processamento concluído com sucesso")
     st.dataframe(df)
 
-    st.download_button(
-        "⬇️ Baixar CSV",
-        df.to_csv(index=False).encode("utf-8"),
-        "custo_por_peca.csv",
-        "text/csv"
-    )
+st.download_button(
+    label="⬇️ Baixar CSV",
+    data=df.to_csv(index=False).encode("utf-8"),
+    file_name="custo_por_peca.csv",
+    mime="text/csv",
+    key="download_csv_unico"
+)
+
