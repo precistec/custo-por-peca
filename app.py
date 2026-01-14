@@ -62,7 +62,21 @@ if st.button("🔧 Processar"):
 
             prod = re.search(r"\b\d{4,}\b", linha_prod)
             mp = re.search(r"\(M\)\s*(\d{4,})", linha_mp)
-            qtd = re.search(r"\b\d+\b", linha_qtd)
+            try:
+                qtd_pecas = int(linha_qtd.strip())
+            except:
+                qtd_pecas = 0
+
+            if prod and mp and qtd_pecas > 0 and consumo:
+    requisicao.append({
+        "produto": prod.group(0),
+        "mp": mp.group(1),
+        "qtd": qtd_pecas,
+        "consumo": float(consumo[-1].replace(",", "."))
+    })
+
+
+            
             consumo = re.findall(r"\d+,\d+", linha_mp)
 
             if prod and mp and qtd and consumo:
