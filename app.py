@@ -50,8 +50,8 @@ if st.button("🔧 Processar"):
                 codigo_mp = linha.split()[0]
                 valor_total = float(valores[-1].replace(",", "."))
                 
-if codigo_mp in nf_mp:
-    nf_mp[codigo_mp] += valor_total
+        if codigo_mp in nf_mp:
+            nf_mp[codigo_mp] += valor_total
 else:
     nf_mp[codigo_mp] = valor_total
     nf_mp[codigo_mp] = valor_total
