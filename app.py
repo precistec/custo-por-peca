@@ -33,27 +33,34 @@ if st.button("🔧 Processar"):
     linhas_nf = extrair_linhas(nf_file)
     linhas_req = extrair_linhas(req_file)
 
-    # =============================
-    # 2. EXTRAIR MATÉRIA-PRIMA DA NF
-    # =============================
-    nf_mp = {}
+# =============================
+# 2. EXTRAIR MATÉRIA-PRIMA DA NF
+# =============================
+nf_mp = {}
 
-    for linha in linhas_nf:
-        linha = linha.strip()
+for linha in linhas_nf:
+    linha = linha.strip()
 
-        # linha começa com código da MP
-        if re.match(r"^\d{4,5}\s", linha):
-            valores = re.findall(r"\d+,\d+", linha)
+    # linha começa com código numérico (MP)
+    if re.match(r"^\d{4,5}\s", linha):
+        partes = linha.split()
 
-            # pega SEMPRE o último valor (VALOR TOTAL)
-            if len(valores) >= 1:
-                codigo_mp = linha.split()[0]
-                valor_total = float(valores[-1].replace(",", "."))
+        # extrai todos os números com vírgula
+        valores = re.findall(r"\d+,\d+", linha)
 
+        # precisamos de pelo menos: quantidade, unitário e total
+        if len(valores) >= 3:
+            codigo_mp = partes[0]
+
+            # VALOR TOTAL é SEMPRE o 3º número
+            valor_total = float(valores[2].replace(",", "."))
+
+            # somar caso a MP apareça mais de uma vez
             if codigo_mp in nf_mp:
                 nf_mp[codigo_mp] += valor_total
             else:
                 nf_mp[codigo_mp] = valor_total
+
 
 
              
