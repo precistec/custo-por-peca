@@ -44,7 +44,7 @@ if st.button("🔧 Processar"):
 # =============================
 nf_mp = {}
 
-for linha in linhas_nf:
+    for linha in linhas_nf:
     linha = linha.strip()
 
     # linha precisa começar com código da MP
