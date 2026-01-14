@@ -37,7 +37,7 @@ if st.button("🔧 Processar"):
     # =============================
     nf_mp = {}
 
-    for linha in linhas_nf:
+for linha in linhas_nf:
         # Exemplo esperado: 14592 ... 0,130 ... 5,34
 # =============================
 # EXTRAIR ITENS DA NOTA FISCAL
