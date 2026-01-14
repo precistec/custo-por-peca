@@ -68,11 +68,11 @@ if st.button("🔧 Processar"):
                 qtd_pecas = 0
 
             if prod and mp and qtd_pecas > 0 and consumo:
-    requisicao.append({
-        "produto": prod.group(0),
-        "mp": mp.group(1),
-        "qtd": qtd_pecas,
-        "consumo": float(consumo[-1].replace(",", "."))
+               requisicao.append({
+                   "produto": prod.group(0),
+                   "mp": mp.group(1),
+                   "qtd": qtd_pecas,
+                   "consumo": float(consumo[-1].replace(",", "."))
     })
 
 
