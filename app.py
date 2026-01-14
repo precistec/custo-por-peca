@@ -76,9 +76,6 @@ if st.button("🔧 Processar"):
     })
 
 
-            
-            consumo = re.findall(r"\d+,\d+", linha_mp)
-
             if prod and mp and qtd and consumo:
                 requisicao.append({
                     "produto": prod.group(0),
