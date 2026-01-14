@@ -45,12 +45,12 @@ if st.button("🔧 Processar arquivos"):
 
     linhas_nf = extrair_linhas_pdf(nf_file)
     linhas_req = extrair_linhas_pdf(req_file)
-    st.subheader("DEBUG – Primeiras linhas da Nota Fiscal")
-    st.write(linhas_nf[:20])
 
-    st.subheader("DEBUG – Primeiras linhas da Requisição")
-    st.write(linhas_req[:20])
+    st.subheader("DEBUG – TEXTO DA NOTA FISCAL")
+    st.write(linhas_nf[:40])
 
+    st.subheader("DEBUG – TEXTO DA REQUISIÇÃO")
+    st.write(linhas_req[:40])
 
     st.write("📌 PDFs carregados com sucesso")
 
