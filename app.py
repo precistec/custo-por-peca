@@ -31,12 +31,6 @@ if st.button("🔧 Processar"):
     st.subheader("DEBUG – NF COMPLETA (linhas 40 a 120)")
     st.write(linhas_nf[40:120])
 
-
-    # =============================
-    # 1. EXTRAIR ITENS DA NF (MP)
-    # =============================
-    nf_mp = {}
-
 for linha in linhas_nf:
         # Exemplo esperado: 14592 ... 0,130 ... 5,34
 # =============================
