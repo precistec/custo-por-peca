@@ -42,7 +42,7 @@ if st.button("🔧 Processar"):
 # =============================
 # EXTRAIR ITENS DA NOTA FISCAL
 # =============================
-nf_mp = {}
+    nf_mp = {}
 
     for linha in linhas_nf:
         linha = linha.strip()
