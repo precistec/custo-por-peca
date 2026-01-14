@@ -49,7 +49,11 @@ if st.button("🔧 Processar"):
             if len(valores) >= 1:
                 codigo_mp = linha.split()[0]
                 valor_total = float(valores[-1].replace(",", "."))
-                nf_mp[codigo_mp] = valor_total
+            if codigo_mp in nf_mp:
+            nf_mp[codigo_mp] += valor_total
+            else:
+    nf_mp[codigo_mp] = valor_total
+
 
     # =============================
     # 3. EXTRAIR REQUISIÇÃO
