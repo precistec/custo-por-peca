@@ -13,7 +13,7 @@ nf_file = st.file_uploader("🧾 Nota Fiscal (PDF ou XML)", type=["xlsx", "xls",
 def limpar_linhas(linhas):
     limpas = []
     for l in linhas:
-        if re.search(r"\d{4,}", l):  # linhas com código
+        if re.search(r"\d{4,}", l):
             limpas.append(l)
     return limpas
 
@@ -33,6 +33,13 @@ if req_file and nf_file:
         if req_file.name.endswith(".pdf"):
             linhas = ler_requisicao_pdf(req_file)
 
-            st.subheader("📄 Linhas relevantes da Requisição")
-            for i in range(0, len(linhas)-1, 2):
-                st.write(f"
+            st.subheader("📄 Produto e Matéria-Prima (Requisição)")
+            for i in range(0, len(linhas) - 1, 2):
+                st.write("Produto:", linhas[i])
+                st.write("MP:", linhas[i + 1])
+                st.markdown("---")
+
+        else:
+            df = pd.read_excel(req_file)
+            st.subheader("📊 Requisição (Excel)")
+            st.dataframe(df)
