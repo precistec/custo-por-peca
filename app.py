@@ -1,23 +1,14 @@
 import streamlit as st
-import pdfplumber
+import tabula
 import pandas as pd
 import re
 from collections import defaultdict
 
-st.set_page_config(page_title="Custo por Peça", layout="centered")
-st.title("Cálculo de Custo por Peça")
+st.set_page_config(page_title="Custo por Peça (PDF)", layout="centered")
+st.title("Cálculo de Custo por Peça a partir de PDFs")
 
 nf_file = st.file_uploader("📄 Nota Fiscal (PDF)", type="pdf")
 req_file = st.file_uploader("📄 Requisição (PDF)", type="pdf")
-
-def extrair_linhas(pdf):
-    linhas = []
-    with pdfplumber.open(pdf) as p:
-        for page in p.pages:
-            texto = page.extract_text()
-            if texto:
-                linhas.extend(texto.split("\n"))
-    return linhas
 
 if st.button("🔧 Processar"):
 
@@ -25,66 +16,69 @@ if st.button("🔧 Processar"):
         st.error("Envie a Nota Fiscal e a Requisição.")
         st.stop()
 
-    linhas_nf = extrair_linhas(nf_file)
-    linhas_req = extrair_linhas(req_file)
+    # ======================================
+    # 1. EXTRAIR TABELAS DA NOTA FISCAL
+    # ======================================
+    st.info("Extraindo tabela da Nota Fiscal (isso pode demorar alguns segundos)...")
+    try:
+        # Retorna uma lista de DataFrames (uma tabela por página)
+        tabelas_nf = tabula.read_pdf(nf_file, pages="all", lattice=True)
+    except Exception as e:
+        st.error(f"Erro ao ler NF: {e}")
+        st.stop()
 
-    # ==================================================
-    # 1. EXTRAIR MP DA NOTA FISCAL (COM ESTADO)
-    # ==================================================
     nf_mp = defaultdict(float)
-    codigo_atual = None
 
-    for linha in linhas_nf:
-        linha = linha.strip()
-
-        # Se a linha começar com código numérico → MP ativa
-        match_codigo = re.match(r"^(\d{2,5})\b", linha)
-        if match_codigo:
-            codigo_atual = match_codigo.group(1)
-
-        # Procurar valor monetário (ex: 35,61)
-        valores = re.findall(r"\d+,\d{2}", linha)
-
-        if codigo_atual and valores:
-            valor = float(valores[-1].replace(",", "."))
-            nf_mp[codigo_atual] += valor
-            codigo_atual = None  # evita pegar valor errado depois
+    for tabela in tabelas_nf:
+        tabela = tabela.fillna("")
+        for idx, row in tabela.iterrows():
+            # Tenta pegar código e valor total
+            try:
+                codigo = str(row[0]).strip()
+                valor = str(row[-1]).replace(".", "").replace(",", ".").strip()
+                if codigo.isdigit() and valor:
+                    nf_mp[codigo] += float(valor)
+            except:
+                continue
 
     st.subheader("DEBUG – Matérias-primas capturadas da NF")
     st.write(dict(nf_mp))
 
-    # ==================================================
-    # 2. EXTRAIR REQUISIÇÃO
-    # ==================================================
+    # ======================================
+    # 2. EXTRAIR TABELA DA REQUISIÇÃO
+    # ======================================
+    st.info("Extraindo tabela da Requisição...")
+    try:
+        tabelas_req = tabula.read_pdf(req_file, pages="all", lattice=True)
+    except Exception as e:
+        st.error(f"Erro ao ler Requisição: {e}")
+        st.stop()
+
     itens = []
-    i = 0
 
-    while i < len(linhas_req) - 2:
-        prod = linhas_req[i]
-        qtd = linhas_req[i + 1]
-        mp = linhas_req[i + 2]
+    for tabela in tabelas_req:
+        tabela = tabela.fillna("")
+        for i in range(len(tabela) - 2):
+            linha_prod = str(tabela.iloc[i,0])
+            linha_qtd = str(tabela.iloc[i+1,0])
+            linha_mp = str(tabela.iloc[i+2,0])
 
-        if "PRODUTO INTERMEDIÁRIO" in prod and "MATÉRIA-PRIMA" in mp:
-            cod_prod = re.findall(r"\b\d{4,5}\b", prod)
-            cod_mp = re.findall(r"\b\d{2,5}\b", mp)
-            qtd_prod = re.findall(r"\b\d+\b", qtd)
+            if "PRODUTO INTERMEDIÁRIO" in linha_prod and "MATÉRIA-PRIMA" in linha_mp:
+                cod_prod = re.findall(r"\b\d{4,5}\b", linha_prod)
+                cod_mp = re.findall(r"\b\d{2,5}\b", linha_mp)
+                qtd = re.findall(r"\b\d+\b", linha_qtd)
 
-            if cod_prod and cod_mp and qtd_prod:
-                itens.append({
-                    "produto": cod_prod[0],
-                    "mp": cod_mp[0],
-                    "qtd": int(qtd_prod[0]),
-                    "linha_mp": mp.upper()
-                })
-                i += 3
-            else:
-                i += 1
-        else:
-            i += 1
+                if cod_prod and cod_mp and qtd:
+                    itens.append({
+                        "produto": cod_prod[0],
+                        "mp": cod_mp[0],
+                        "qtd": int(qtd[0]),
+                        "linha_mp": linha_mp.upper()
+                    })
 
-    # ==================================================
-    # 3. CÁLCULO FINAL
-    # ==================================================
+    # ======================================
+    # 3. CALCULO PREÇO POR PEÇA
+    # ======================================
     resultado = []
 
     for item in itens:
@@ -95,7 +89,7 @@ if st.button("🔧 Processar"):
 
         if "ALMOXARIFADO" in linha_mp:
             preco = "ALMOXARIFADO"
-        elif mp not in nf_mp or nf_mp[mp] == 0:
+        elif mp not in nf_mp:
             preco = "Não consta na NF"
         else:
             preco = round(nf_mp[mp] / qtd, 4)
@@ -106,8 +100,7 @@ if st.button("🔧 Processar"):
         })
 
     df = pd.DataFrame(resultado)
-
-    st.success("Processamento concluído corretamente")
+    st.subheader("Resultado Final")
     st.dataframe(df)
 
     st.download_button(
