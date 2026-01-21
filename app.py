@@ -2,89 +2,126 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.set_page_config(page_title="Precistec - Custo por Peça", layout="wide")
+st.set_page_config(page_title="Precistec • NF x Requisição", layout="wide")
 
-st.title("Precistec – Conferência de Custo por Peça")
+st.title("Precistec – Leitura de Nota Fiscal e Requisição")
+st.caption("Separação correta dos dados (sem cálculo)")
 
-st.markdown("""
-Cole **a Nota Fiscal** e **a Requisição** nos campos abaixo.  
-O sistema irá cruzar os dados seguindo o **procedimento definitivo da Precistec**.
-""")
-
+# =========================
+# INPUTS
+# =========================
 col1, col2 = st.columns(2)
 
 with col1:
-    nf_texto = st.text_area("📄 Nota Fiscal (cole exatamente como vem)", height=300)
+    nf_texto = st.text_area(
+        "Cole aqui a NOTA FISCAL (texto bruto)",
+        height=350
+    )
 
 with col2:
-    req_texto = st.text_area("📋 Requisição (cole exatamente como vem)", height=300)
-
-processar = st.button("🔍 Processar NF x Requisição")
+    req_texto = st.text_area(
+        "Cole aqui a REQUISIÇÃO (texto bruto)",
+        height=350
+    )
 
 # =========================
-# FUNÇÕES DE LEITURA
+# FUNÇÃO: LER NOTA FISCAL
 # =========================
-
 def ler_nf(texto):
     linhas = texto.splitlines()
     dados = []
 
     for linha in linhas:
-        partes = re.split(r"\s{2,}", linha.strip())
-        if len(partes) >= 9 and partes[0].isdigit():
-            try:
-                dados.append({
-                    "CODIGO_MP": partes[0],
-                    "DESCRICAO_MP": partes[1],
-                    "UNIDADE": partes[5],
-                    "QUANTIDADE_NF": float(partes[6].replace(",", ".")),
-                    "VALOR_TOTAL_NF": float(partes[8].replace(".", "").replace(",", "."))
-                })
-            except:
-                pass
+        linha = linha.strip()
 
-    return pd.DataFrame(dados)
+        # começa com código numérico
+        if not re.match(r"^\d{4,}", linha):
+            continue
 
-def ler_requisicao(texto):
-    linhas = texto.splitlines()
-    dados = []
-    produto_atual = None
+        partes = re.split(r"\s{2,}", linha)
 
-    for linha in linhas:
-        if "PRODUTO INTERMEDIÁRIO" in linha:
-            partes = linha.split()
-            produto_atual = {
-                "CODIGO_PRODUTO": partes[-2],
-                "DESCRICAO_PRODUTO": " ".join(partes[3:-2]),
-                "QTDE_PECAS": int(partes[-1])
-            }
+        if len(partes) < 8:
+            continue
 
-        elif "MATÉRIA-PRIMA" in linha and produto_atual:
-            partes = linha.split()
+        try:
+            codigo = partes[0]
+            descricao = partes[1]
+            unidade = partes[5]
+            quantidade = partes[6].replace(",", ".")
+            valor_total = partes[8].replace(".", "").replace(",", ".")
+
+            if unidade not in ["M", "UNI", "UN"]:
+                continue
+
             dados.append({
-                **produto_atual,
-                "CODIGO_MP": partes[-2],
-                "QTDE_REQUISICAO": float(partes[-1].replace(",", "."))
+                "CÓDIGO": codigo,
+                "DESCRIÇÃO": descricao,
+                "UNIDADE": unidade,
+                "QUANTIDADE": float(quantidade),
+                "VALOR TOTAL (NF)": float(valor_total)
             })
-            produto_atual = None
+
+        except:
+            continue
 
     return pd.DataFrame(dados)
+
+
+# =========================
+# FUNÇÃO: LER REQUISIÇÃO
+# =========================
+def ler_requisicao(texto):
+    linhas = [l.strip() for l in texto.splitlines() if l.strip()]
+    dados = []
+
+    i = 0
+    while i < len(linhas) - 1:
+        if linhas[i].startswith("PRODUTO INTERMEDIÁRIO"):
+            prod_linha = linhas[i]
+            mp_linha = linhas[i + 1]
+
+            prod_partes = prod_linha.split()
+            mp_partes = mp_linha.split()
+
+            try:
+                produto_codigo = prod_partes[3]
+                produto_desc = " ".join(prod_partes[4:-1])
+                produto_qtde = prod_partes[-1]
+
+                mp_codigo = mp_partes[2]
+                mp_desc = " ".join(mp_partes[3:-1])
+                mp_qtde = mp_partes[-1]
+
+                dados.append({
+                    "PRODUTO CÓDIGO": produto_codigo,
+                    "PRODUTO DESCRIÇÃO": produto_desc,
+                    "QTDE PRODUTO": produto_qtde,
+                    "MP CÓDIGO": mp_codigo,
+                    "MP DESCRIÇÃO": mp_desc,
+                    "QTDE MP (REQ)": mp_qtde
+                })
+
+                i += 2
+            except:
+                i += 1
+        else:
+            i += 1
+
+    return pd.DataFrame(dados)
+
 
 # =========================
 # PROCESSAMENTO
 # =========================
+if st.button("Processar dados"):
+    st.divider()
 
-if processar:
-    if not nf_texto or not req_texto:
-        st.error("Cole a Nota Fiscal e a Requisição.")
-    else:
-        df_nf = ler_nf(nf_texto)
-        df_req = ler_requisicao(req_texto)
+    st.subheader("📄 Nota Fiscal – Linhas válidas")
+    df_nf = ler_nf(nf_texto)
+    st.dataframe(df_nf, use_container_width=True)
 
-        st.subheader("📄 Nota Fiscal – Dados lidos")
-        st.dataframe(df_nf)
+    st.subheader("🧾 Requisição – Produto x Matéria-prima")
+    df_req = ler_requisicao(req_texto)
+    st.dataframe(df_req, use_container_width=True)
 
-        st.subheader("📋 Requisição – Dados lidos")
-        st.dataframe(df_req)
-
-        st.success("Leitura concluída. Próximo passo: cálculo e rateio definitivo.")
+    st.success("Leitura concluída sem misturar dados.")
