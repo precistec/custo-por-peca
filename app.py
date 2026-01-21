@@ -1,3 +1,6 @@
+import re
+import pandas as pd
+
 def parse_nf(texto):
     linhas = texto.splitlines()
     dados = []
@@ -5,8 +8,7 @@ def parse_nf(texto):
     for l in linhas:
         l = l.strip()
 
-        # ignora linhas vazias ou lixo
-        if not l or not re.match(r"^\d{4,6}\s", l):
+        if not l or not re.search(r"\b\d{4,6}\b", l):
             continue
 
         partes = l.split()
@@ -14,9 +16,7 @@ def parse_nf(texto):
         try:
             codigo = partes[0]
 
-            # unidade costuma ser o 4º item a partir do fim
             unidade = partes[-4]
-
             qtde_nf = float(partes[-3].replace(",", "."))
             valor_total = float(partes[-1].replace(",", "."))
 
@@ -31,7 +31,6 @@ def parse_nf(texto):
             })
 
         except Exception:
-            # se alguma linha vier quebrada, simplesmente ignora
             continue
 
     return pd.DataFrame(dados)
