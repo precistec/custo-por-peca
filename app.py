@@ -2,136 +2,120 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.set_page_config(page_title="Custo por Peça - Precistec", layout="wide")
+st.set_page_config(page_title="Cálculo Custo por Peça", layout="wide")
+
 st.title("Cálculo de Custo por Peça - Precistec")
+st.markdown("Cole abaixo a **Requisição** e a **Nota Fiscal** nos campos correspondentes.")
 
-st.subheader("Cole a Requisição")
-req_text = st.text_area("Requisição", height=300)
+# Campos de texto para entrada
+req_text = st.text_area("Texto da Requisição", height=300)
+nf_text = st.text_area("Texto da Nota Fiscal", height=300)
 
-st.subheader("Cole a Nota Fiscal")
-nf_text = st.text_area("Nota Fiscal", height=300)
-
-def parse_requisicao(text):
+def parse_requisicao(texto):
+    linhas = texto.split("\n")
     produtos = []
-    lines = text.split("\n")
     i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-        if line.startswith("PRODUTO INTERMEDIÁRIO"):
-            # Extrai código, descrição e quantidade no final
-            match = re.search(r"(\d+)\s+(.*)\s+(\d+)$", line)
-            if match:
-                codigo, descricao, qtde_prod = match.groups()
-                produto = {
-                    "codigo": codigo,
-                    "descricao": descricao.strip(),
-                    "qtde_prod": int(qtde_prod),
-                    "materia_prima": None,
-                    "qtde_mp": None
-                }
-                # Próxima linha deve ser a MP
-                if i + 1 < len(lines):
-                    mp_line = lines[i+1].strip()
-                    if mp_line.startswith("MATÉRIA-PRIMA"):
-                        mp_match = re.search(r"(\d+)\s+(.*)\s+([\d.,]+|ALMOXARIFADO|RETALHO)$", mp_line)
-                        if mp_match:
-                            mp_codigo, mp_desc, mp_qtde = mp_match.groups()
-                            mp_qtde = mp_qtde.replace(",", ".")
-                            produto["materia_prima"] = mp_codigo
-                            if mp_qtde.upper() in ["ALMOXARIFADO", "RETALHO"]:
-                                produto["qtde_mp"] = mp_qtde.upper()
-                            else:
-                                try:
-                                    produto["qtde_mp"] = float(mp_qtde)
-                                except:
-                                    produto["qtde_mp"] = 0.0
-                produtos.append(produto)
-                i += 2
-            else:
-                i += 1
-        else:
+    while i < len(linhas):
+        linha = linhas[i].strip()
+        if linha.startswith("PRODUTO INTERMEDIÁRIO") or linha.startswith("PRODUTO INTERMEDIARIO"):
+            partes = linha.split()
+            codigo = partes[2]
+            # pega tudo entre o código e a quantidade
+            qtde = float(partes[-1].replace(",", "."))
+            descricao = " ".join(partes[3:-1])
             i += 1
-    return produtos
-
-def parse_nf(text):
-    nf_items = {}
-    lines = text.split("\n")
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("CÓDIGO"):
-            continue
-        parts = re.split(r"\s{2,}|\t", line)
-        if len(parts) < 9:
-            continue
-        codigo = parts[0].strip()
-        unidade = parts[5].strip().upper()
-        try:
-            qtde = float(parts[6].replace(",", "."))
-            valor_total = float(parts[8].replace(",", "."))
-        except:
-            qtde = 0.0
-            valor_total = 0.0
-        nf_items[codigo] = {
-            "unidade": unidade,
-            "qtde": qtde,
-            "valor_total": valor_total
-        }
-    return nf_items
-
-def calcular_custo(produtos, nf_items):
-    resultados = []
-    for p in produtos:
-        codigo = p["codigo"]
-        qtde_prod = p["qtde_prod"]
-        mp = p["materia_prima"]
-        qtde_mp = p["qtde_mp"]
-        divergencia = ""
-
-        if mp is None:
-            rpp = "Não consta na NF"
-            divergencia = "MP não informada na requisição"
-            total_item = "-"
-        elif mp not in nf_items:
-            rpp = "Não consta na NF"
-            divergencia = "MP não consta na NF"
-            total_item = "-"
-        elif isinstance(qtde_mp, str) and qtde_mp in ["ALMOXARIFADO", "RETALHO"]:
-            rpp = qtde_mp
-            divergencia = "Item ALMOXARIFADO ou RETALHO"
-            total_item = "-"
-        else:
-            nf = nf_items[mp]
-            if nf["unidade"] in ["UNI", "UN"]:
-                # valor total / qtde produto
-                rpp = nf["valor_total"] / qtde_prod
-                total_item = rpp * qtde_prod
+            if i < len(linhas):
+                mp_linha = linhas[i].strip()
+                mp_partes = mp_linha.split()
+                mp_codigo = mp_partes[2]
+                mp_qtde = float(mp_partes[-1].replace(",", "."))
+                mp_descricao = " ".join(mp_partes[3:-1])
             else:
-                qtde_nf = nf["qtde"]
-                if qtde_nf != qtde_mp:
-                    divergencia = "Quantidade MP NF ≠ requisição"
-                rpp = (nf["valor_total"] / qtde_nf) * qtde_mp / qtde_prod
-                total_item = rpp * qtde_prod
+                mp_codigo = ""
+                mp_descricao = ""
+                mp_qtde = 0
+            produtos.append({
+                "produto_codigo": codigo,
+                "produto_descricao": descricao,
+                "produto_qtde": qtde,
+                "mp_codigo": mp_codigo,
+                "mp_descricao": mp_descricao,
+                "mp_qtde": mp_qtde
+            })
+        i += 1
+    return pd.DataFrame(produtos)
 
+def parse_nf(texto):
+    linhas = texto.split("\n")
+    nf_itens = []
+    for linha in linhas:
+        linha = linha.strip()
+        if not linha or linha.startswith("CÓDIGO"):
+            continue
+        partes = re.split(r"\s{2,}|\t", linha)
+        if len(partes) < 9:
+            # fallback: pegar último número como valor total
+            match = re.findall(r"[\d.,]+$", linha)
+            if match:
+                valor_total = float(match[0].replace(",", "."))
+            else:
+                continue
+        else:
+            valor_total = float(partes[-2].replace(",", "."))
+        codigo = partes[0]
+        descricao = partes[1]
+        unidade = partes[5] if len(partes) > 5 else "M"
+        qtde = float(partes[6].replace(",", ".")) if len(partes) > 6 else 0
+        nf_itens.append({
+            "codigo": codigo,
+            "descricao": descricao,
+            "unidade": unidade,
+            "qtde_nf": qtde,
+            "valor_total_nf": valor_total
+        })
+    return pd.DataFrame(nf_itens)
+
+def calcular_custo(req_df, nf_df):
+    resultados = []
+    for idx, row in req_df.iterrows():
+        mp_nf = nf_df[nf_df["codigo"] == row["mp_codigo"]]
+        if mp_nf.empty:
+            preco_peca = "Não consta na NF"
+            divergencia = "MP não consta na NF"
+        else:
+            # Unidade de medida
+            if mp_nf.iloc[0]["unidade"].upper() in ["UNI", "UN"]:
+                preco_peca = mp_nf["valor_total_nf"].sum() / row["produto_qtde"]
+                divergencia = "Produto unitário (UNI/UN)"
+            else:
+                # Rateio proporcional pelo consumo da requisição
+                total_consumo = mp_nf["qtde_nf"].sum()
+                if total_consumo == 0:
+                    preco_peca = 0
+                else:
+                    preco_peca = (row["mp_qtde"] / total_consumo) * mp_nf["valor_total_nf"].sum() / row["produto_qtde"]
+                divergencia = "-" if row["mp_qtde"] <= total_consumo else "Quantidade MP NF ≠ requisição"
         resultados.append({
-            "CÓDIGO": codigo,
-            "DESCRIÇÃO": p["descricao"],
-            "QUANTIDADE": qtde_prod,
-            "R$/PEÇA": round(rpp,4) if isinstance(rpp,float) else rpp,
-            "TOTAL (R$)": round(total_item,2) if isinstance(total_item,float) else total_item,
-            "DIVERGÊNCIA": divergencia if divergencia else "—"
+            "CÓDIGO": row["produto_codigo"],
+            "DESCRIÇÃO": row["produto_descricao"],
+            "QTDE": row["produto_qtde"],
+            "R$/PEÇA": round(preco_peca, 4) if isinstance(preco_peca, float) else preco_peca,
+            "TOTAL (R$)": round(preco_peca * row["produto_qtde"], 2) if isinstance(preco_peca, float) else preco_peca,
+            "DIVERGÊNCIA": divergencia
         })
     return pd.DataFrame(resultados)
 
-if req_text and nf_text:
-    produtos = parse_requisicao(req_text)
-    nf_items = parse_nf(nf_text)
-    if produtos and nf_items:
-        df_result = calcular_custo(produtos, nf_items)
-        st.subheader("Tabela Final")
-        st.dataframe(df_result)
-        total_geral = df_result[df_result['TOTAL (R$)'] != '-']['TOTAL (R$)'].sum()
-        st.markdown(f"**TOTAL GERAL (somando coluna TOTAL (R$))**: {total_geral:.2f}")
-    else:
-        st.error("❌ Não foi possível interpretar a requisição ou a NF. Verifique o texto colado.")
-else:
-    st.info("Cole a Requisição e a Nota Fiscal acima para processar.")
+if st.button("Calcular Custo"):
+    try:
+        req_df = parse_requisicao(req_text)
+        nf_df = parse_nf(nf_text)
+        if req_df.empty or nf_df.empty:
+            st.error("❌ Não foi possível interpretar a requisição ou a NF. Verifique o texto colado.")
+        else:
+            result_df = calcular_custo(req_df, nf_df)
+            st.subheader("Resultado Final")
+            st.dataframe(result_df)
+            total_geral = result_df[result_df["TOTAL (R$)"].apply(lambda x: isinstance(x, (int, float)))]["TOTAL (R$)"].sum()
+            st.markdown(f"**Total Geral (R$) conferido:** {total_geral:.2f}")
+    except Exception as e:
+        st.error(f"Erro ao processar: {e}")
