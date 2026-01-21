@@ -17,23 +17,28 @@ def parse_requisicao(texto):
     i = 0
     while i < len(linhas):
         linha = linhas[i].strip()
-        if linha.startswith("PRODUTO INTERMEDIÁRIO") or linha.startswith("PRODUTO INTERMEDIARIO"):
-            partes = linha.split()
-            codigo = partes[2]
-            # pega tudo entre o código e a quantidade
-            qtde = float(partes[-1].replace(",", "."))
-            descricao = " ".join(partes[3:-1])
+        if not linha:
             i += 1
+            continue
+        if linha.startswith("PRODUTO INTERMEDIÁRIO") or linha.startswith("PRODUTO INTERMEDIARIO"):
+            # Captura código, quantidade e descrição via regex
+            match = re.match(r".*?(\d+)\s+(.*?)\s+(\d+)$", linha)
+            if not match:
+                i += 1
+                continue
+            codigo = match.group(1)
+            descricao = match.group(2)
+            qtde = float(match.group(3).replace(",", "."))
+            i += 1
+            mp_codigo, mp_descricao, mp_qtde = "", "", 0
             if i < len(linhas):
                 mp_linha = linhas[i].strip()
-                mp_partes = mp_linha.split()
-                mp_codigo = mp_partes[2]
-                mp_qtde = float(mp_partes[-1].replace(",", "."))
-                mp_descricao = " ".join(mp_partes[3:-1])
-            else:
-                mp_codigo = ""
-                mp_descricao = ""
-                mp_qtde = 0
+                if mp_linha.startswith("MATÉRIA-PRIMA") or mp_linha.startswith("MATERIA-PRIMA"):
+                    mp_match = re.match(r".*?(\d+)\s+(.*?)\s+([\d.,]+)$", mp_linha)
+                    if mp_match:
+                        mp_codigo = mp_match.group(1)
+                        mp_descricao = mp_match.group(2)
+                        mp_qtde = float(mp_match.group(3).replace(",", "."))
             produtos.append({
                 "produto_codigo": codigo,
                 "produto_descricao": descricao,
@@ -50,27 +55,32 @@ def parse_nf(texto):
     nf_itens = []
     for linha in linhas:
         linha = linha.strip()
-        if not linha or linha.startswith("CÓDIGO"):
+        if not linha or linha.startswith("CÓDIGO") or len(linha) < 5:
             continue
-        partes = re.split(r"\s{2,}|\t", linha)
-        if len(partes) < 9:
-            # fallback: pegar último número como valor total
-            match = re.findall(r"[\d.,]+$", linha)
-            if match:
-                valor_total = float(match[0].replace(",", "."))
-            else:
-                continue
+        # Captura último número como valor total
+        valor_total_match = re.findall(r"([\d.,]+)\s*$", linha)
+        if not valor_total_match:
+            continue
+        valor_total = float(valor_total_match[-1].replace(",", "."))
+        # Captura código, quantidade e unidade
+        codigo_match = re.match(r"(\d+)\s+(.*?)\s+(\d+\.?\d*)\s+(\w+)\s*$", linha)
+        if codigo_match:
+            codigo = codigo_match.group(1)
+            descricao = codigo_match.group(2)
+            qtde_nf = float(codigo_match.group(3).replace(",", "."))
+            unidade = codigo_match.group(4)
         else:
-            valor_total = float(partes[-2].replace(",", "."))
-        codigo = partes[0]
-        descricao = partes[1]
-        unidade = partes[5] if len(partes) > 5 else "M"
-        qtde = float(partes[6].replace(",", ".")) if len(partes) > 6 else 0
+            # fallback mínimo
+            partes = linha.split()
+            codigo = partes[0]
+            descricao = " ".join(partes[1:-2])
+            qtde_nf = float(partes[-2].replace(",", "."))
+            unidade = partes[-3] if len(partes) > 3 else "M"
         nf_itens.append({
             "codigo": codigo,
             "descricao": descricao,
             "unidade": unidade,
-            "qtde_nf": qtde,
+            "qtde_nf": qtde_nf,
             "valor_total_nf": valor_total
         })
     return pd.DataFrame(nf_itens)
