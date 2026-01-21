@@ -2,122 +2,156 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.set_page_config(page_title="Cálculo de Custo por Peça", layout="wide")
+st.set_page_config(page_title="Custo por Peça - Precistec", layout="wide")
 
-st.title("Cálculo de Custo por Peça — Precistec")
+st.title("Cálculo de Custo por Peça - Precistec")
+st.markdown("Cole abaixo a Requisição e a Nota Fiscal (texto) para gerar a tabela de custos.")
 
-# Campos de texto para colar Requisição e NF
-st.subheader("Cole a Requisição")
-req_text = st.text_area("Texto da Requisição", height=300)
+# --- Campos de texto ---
+req_text = st.text_area("Requisição", height=300)
+nf_text = st.text_area("Nota Fiscal", height=300)
 
-st.subheader("Cole a Nota Fiscal")
-nf_text = st.text_area("Texto da Nota Fiscal", height=300)
-
-# Função para parsear Requisição
-def parse_requisicao(texto):
-    itens = []
-    linhas = texto.strip().split("\n")
+# --- Funções para parse ---
+def parse_requisicao(text):
+    """
+    Converte o texto da requisição em lista de produtos e MPs
+    Funciona para linhas únicas ou padrão antigo
+    """
+    lines = text.strip().splitlines()
+    items = []
     i = 0
-    while i < len(linhas):
-        linha = linhas[i].strip()
-        if linha.startswith("PRODUTO INTERMEDIÁRIO"):
-            prod = {
-                "tipo": "produto",
-                "codigo": linhas[i+1].strip(),
-                "descricao": linhas[i+2].strip(),
-                "quantidade": float(linhas[i+3].strip().replace(",", ".")),
-                "materia_prima": None,
-                "consumo": None
-            }
-            if i+4 < len(linhas) and linhas[i+4].startswith("MATÉRIA-PRIMA"):
-                mp = {
-                    "codigo": linhas[i+5].strip(),
-                    "descricao": linhas[i+6].strip(),
-                    "consumo": float(linhas[i+7].strip().replace(",", ".")) if ',' in linhas[i+7] or '.' in linhas[i+7] else float(linhas[i+7].strip())
-                }
-                prod["materia_prima"] = mp
-            itens.append(prod)
-            i += 8
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("PRODUTO INTERMEDIÁRIO") or line.startswith("PRODUTO INTERMEDIÁRIO (PÇ)"):
+            # Produto
+            produto_codigo = ""
+            produto_desc = ""
+            produto_qtde = ""
+            # Formato compacto: tudo na mesma linha
+            m = re.match(r"PRODUTO.*? (\d+) (.+?) (\d+\.?\d*)$", line)
+            if m:
+                produto_codigo = m.group(1)
+                produto_desc = m.group(2)
+                produto_qtde = float(m.group(3))
+                i += 1
+            else:
+                # Formato antigo: 4 linhas
+                produto_codigo = lines[i+1].strip()
+                produto_desc = lines[i+2].strip()
+                produto_qtde = float(lines[i+3].strip().replace(",", "."))
+                i += 4
+            # Próxima linha é MP
+            mp_line = lines[i].strip()
+            if mp_line.startswith("MATÉRIA-PRIMA") or mp_line.startswith("MATÉRIA-PRIMA (M)"):
+                # Formato compacto
+                m2 = re.match(r".*? (\d+) (.+?) (\d+\.?\d*)$", mp_line)
+                if m2:
+                    mp_codigo = m2.group(1)
+                    mp_desc = m2.group(2)
+                    mp_qtde = float(m2.group(3))
+                    i += 1
+                else:
+                    # Formato antigo: 4 linhas
+                    mp_codigo = lines[i+1].strip()
+                    mp_desc = lines[i+2].strip()
+                    mp_qtde = float(lines[i+3].strip().replace(",", "."))
+                    i += 4
+            else:
+                i += 1
+                continue
+            items.append({
+                "produto_codigo": produto_codigo,
+                "produto_desc": produto_desc,
+                "produto_qtde": produto_qtde,
+                "mp_codigo": mp_codigo,
+                "mp_desc": mp_desc,
+                "mp_qtde": mp_qtde
+            })
         else:
             i += 1
-    return itens
+    return pd.DataFrame(items)
 
-# Função para parsear NF
-def parse_nf(texto):
-    linhas = texto.strip().split("\n")
-    nf_itens = []
-    for linha in linhas[1:]:  # Pular cabeçalho
-        linha = linha.strip()
-        if not linha:
+def parse_nf(text):
+    """
+    Converte o texto da NF em DataFrame
+    Reconhece M, UNI, UN etc
+    """
+    lines = text.strip().splitlines()
+    data = []
+    for line in lines:
+        line = line.strip()
+        if line == "" or line.startswith("CÓDIGO") or line.startswith("---"):
             continue
-        # Separar campos por espaços, mantendo números com vírgula ou ponto
-        partes = re.split(r'\s{2,}', linha)
-        if len(partes) < 10:
-            continue  # Ignora linhas incompletas
-        try:
-            nf_itens.append({
-                "codigo": partes[0],
-                "descricao": partes[1],
-                "uni": partes[6],
-                "qtde_nf": float(partes[7].replace(",", ".")),
-                "valor_unitario": float(partes[8].replace(",", ".")),
-                "valor_total": float(partes[9].replace(",", "."))
-            })
-        except:
+        parts = re.split(r"\s{2,}", line)
+        if len(parts) < 9:
             continue
-    return nf_itens
-
-# Função para gerar tabela final
-def gerar_tabela(req_itens, nf_itens):
-    rows = []
-    for prod in req_itens:
-        mp = prod["materia_prima"]
-        if mp:
-            # Procurar NF correspondente
-            nf_match = [n for n in nf_itens if n["codigo"] == mp["codigo"]]
-            if nf_match:
-                nf_item = nf_match[0]
-                # Se unidade é UNI/UN -> preço por peça = valor unitário
-                if nf_item["uni"].upper() in ["UNI", "UN"]:
-                    preco_peca = nf_item["valor_unitario"]
-                    divergencia = "Item unitário (não entra no rateio)"
-                else:
-                    # Rateio proporcional
-                    preco_peca = (mp["consumo"] * nf_item["valor_unitario"]) / prod["quantidade"]
-                    divergencia = ""
-            else:
-                preco_peca = 0.0
-                divergencia = "MP não consta na NF"
-        else:
-            preco_peca = 0.0
-            divergencia = "Sem MP"
-
-        total = preco_peca * prod["quantidade"]
-        rows.append({
-            "CÓDIGO": prod["codigo"],
-            "DESCRIÇÃO": prod["descricao"],
-            "QUANTIDADE": prod["quantidade"],
-            "R$/PEÇA": round(preco_peca, 4),
-            "TOTAL (R$)": round(total, 2),
-            "DIVERGÊNCIA": divergencia
+        codigo = parts[0]
+        descricao = parts[1]
+        unidade = parts[5]
+        qtde = float(parts[6].replace(",", "."))
+        vunit = float(parts[7].replace(",", "."))
+        valor_total = float(parts[8].replace(",", "."))
+        data.append({
+            "mp_codigo": codigo,
+            "mp_desc": descricao,
+            "unidade": unidade,
+            "qtde_nf": qtde,
+            "vunit_nf": vunit,
+            "total_nf": valor_total
         })
-    df = pd.DataFrame(rows)
-    return df
+    return pd.DataFrame(data)
 
-# Processamento
-if st.button("Gerar tabela"):
-    if not req_text.strip() or not nf_text.strip():
-        st.error("Coloque tanto a Requisição quanto a Nota Fiscal.")
-    else:
-        try:
-            req_itens = parse_requisicao(req_text)
-            nf_itens = parse_nf(nf_text)
-            if not req_itens or not nf_itens:
-                st.error("Não foi possível interpretar a requisição ou a NF. Verifique o texto colado.")
+def calcular_custos(req_df, nf_df):
+    """
+    Faz o rateio, aplica regras de UNI/UN, cria divergência
+    """
+    resultado = []
+    for idx, row in req_df.iterrows():
+        mp_nf = nf_df[nf_df["mp_codigo"] == row["mp_codigo"]]
+        divergencia = ""
+        preco_peca = 0.0
+        if len(mp_nf) == 0:
+            preco_peca = 0.0
+            divergencia = "Matéria-prima não consta na NF"
+        else:
+            mp_nf_total = mp_nf["total_nf"].sum()
+            if row["mp_qtde"] == 0:
+                preco_peca = 0.0
+                divergencia = "Quantidade de matéria-prima da requisição diferente da NF"
             else:
-                tabela_final = gerar_tabela(req_itens, nf_itens)
-                st.subheader("Tabela Final")
-                st.dataframe(tabela_final)
-                st.markdown("✅ Valores prontos para copiar/colar no Word")
-        except Exception as e:
-            st.error(f"Erro ao processar: {e}")
+                preco_peca = mp_nf_total * (row["mp_qtde"] / mp_nf["qtde_nf"].sum()) / row["produto_qtde"]
+
+            # Verifica unidade
+            unidade = mp_nf.iloc[0]["unidade"]
+            if unidade.upper() in ["UNI", "UN"]:
+                preco_peca = mp_nf_total  # Valor total para itens unitários
+                divergencia = f"Produto unitário ({unidade})"
+        total = preco_peca * row["produto_qtde"]
+        resultado.append({
+            "produto_codigo": row["produto_codigo"],
+            "produto_desc": row["produto_desc"],
+            "produto_qtde": row["produto_qtde"],
+            "mp_codigo": row["mp_codigo"],
+            "mp_desc": row["mp_desc"],
+            "preco_peca": round(preco_peca, 4),
+            "total": round(total, 2),
+            "divergencia": divergencia
+        })
+    return pd.DataFrame(resultado)
+
+# --- Processamento ---
+if st.button("Calcular custos"):
+    try:
+        req_df = parse_requisicao(req_text)
+        nf_df = parse_nf(nf_text)
+        st.subheader("Requisição Estruturada")
+        st.dataframe(req_df)
+        st.subheader("NF Estruturada")
+        st.dataframe(nf_df)
+        result_df = calcular_custos(req_df, nf_df)
+        st.subheader("Resultado Final")
+        st.dataframe(result_df)
+        soma_total = result_df["total"].sum()
+        st.markdown(f"**Soma total da coluna TOTAL (R$): {soma_total:.2f}**")
+    except Exception as e:
+        st.error(f"Erro ao processar: {e}")
