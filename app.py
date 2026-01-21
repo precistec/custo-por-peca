@@ -5,11 +5,10 @@ import re
 st.set_page_config(page_title="Custo por Peça - Precistec", layout="wide")
 st.title("Cálculo de Custo por Peça - Precistec")
 
-# Inputs de texto
-st.subheader("Cole aqui a Requisição")
+st.subheader("Cole a Requisição")
 req_text = st.text_area("Requisição", height=300)
 
-st.subheader("Cole aqui a Nota Fiscal")
+st.subheader("Cole a Nota Fiscal")
 nf_text = st.text_area("Nota Fiscal", height=300)
 
 def parse_requisicao(text):
@@ -19,19 +18,20 @@ def parse_requisicao(text):
     while i < len(lines):
         line = lines[i].strip()
         if line.startswith("PRODUTO INTERMEDIÁRIO"):
+            # Extrai código, descrição e quantidade no final
             match = re.search(r"(\d+)\s+(.*)\s+(\d+)$", line)
             if match:
-                codigo, descricao, quantidade = match.groups()
+                codigo, descricao, qtde_prod = match.groups()
                 produto = {
                     "codigo": codigo,
                     "descricao": descricao.strip(),
-                    "qtde_prod": int(quantidade),
+                    "qtde_prod": int(qtde_prod),
                     "materia_prima": None,
                     "qtde_mp": None
                 }
-                # próxima linha deve ser a MP
+                # Próxima linha deve ser a MP
                 if i + 1 < len(lines):
-                    mp_line = lines[i + 1].strip()
+                    mp_line = lines[i+1].strip()
                     if mp_line.startswith("MATÉRIA-PRIMA"):
                         mp_match = re.search(r"(\d+)\s+(.*)\s+([\d.,]+|ALMOXARIFADO|RETALHO)$", mp_line)
                         if mp_match:
@@ -41,7 +41,10 @@ def parse_requisicao(text):
                             if mp_qtde.upper() in ["ALMOXARIFADO", "RETALHO"]:
                                 produto["qtde_mp"] = mp_qtde.upper()
                             else:
-                                produto["qtde_mp"] = float(mp_qtde)
+                                try:
+                                    produto["qtde_mp"] = float(mp_qtde)
+                                except:
+                                    produto["qtde_mp"] = 0.0
                 produtos.append(produto)
                 i += 2
             else:
@@ -58,7 +61,7 @@ def parse_nf(text):
         if not line or line.startswith("CÓDIGO"):
             continue
         parts = re.split(r"\s{2,}|\t", line)
-        if len(parts) < 10:
+        if len(parts) < 9:
             continue
         codigo = parts[0].strip()
         unidade = parts[5].strip().upper()
@@ -98,34 +101,37 @@ def calcular_custo(produtos, nf_items):
             total_item = "-"
         else:
             nf = nf_items[mp]
-            # Se unidade é UNI/UN, preço por peça é valor unitário da NF
             if nf["unidade"] in ["UNI", "UN"]:
+                # valor total / qtde produto
                 rpp = nf["valor_total"] / qtde_prod
                 total_item = rpp * qtde_prod
             else:
-                # Rateio proporcional se necessário
                 qtde_nf = nf["qtde"]
                 if qtde_nf != qtde_mp:
                     divergencia = "Quantidade MP NF ≠ requisição"
                 rpp = (nf["valor_total"] / qtde_nf) * qtde_mp / qtde_prod
                 total_item = rpp * qtde_prod
+
         resultados.append({
             "CÓDIGO": codigo,
             "DESCRIÇÃO": p["descricao"],
             "QUANTIDADE": qtde_prod,
-            "R$/PEÇA": round(rpp, 4) if isinstance(rpp, float) else rpp,
-            "TOTAL (R$)": round(total_item, 2) if isinstance(total_item, float) else total_item,
+            "R$/PEÇA": round(rpp,4) if isinstance(rpp,float) else rpp,
+            "TOTAL (R$)": round(total_item,2) if isinstance(total_item,float) else total_item,
             "DIVERGÊNCIA": divergencia if divergencia else "—"
         })
     return pd.DataFrame(resultados)
 
-# Processamento
 if req_text and nf_text:
     produtos = parse_requisicao(req_text)
     nf_items = parse_nf(nf_text)
-    df_result = calcular_custo(produtos, nf_items)
-    st.subheader("Resultado Final")
-    st.dataframe(df_result)
-    st.markdown(f"**TOTAL GERAL (somando coluna TOTAL (R$))**: {df_result[df_result['TOTAL (R$)'] != '-']['TOTAL (R$)'].sum():.2f}")
+    if produtos and nf_items:
+        df_result = calcular_custo(produtos, nf_items)
+        st.subheader("Tabela Final")
+        st.dataframe(df_result)
+        total_geral = df_result[df_result['TOTAL (R$)'] != '-']['TOTAL (R$)'].sum()
+        st.markdown(f"**TOTAL GERAL (somando coluna TOTAL (R$))**: {total_geral:.2f}")
+    else:
+        st.error("❌ Não foi possível interpretar a requisição ou a NF. Verifique o texto colado.")
 else:
-    st.warning("Cole o texto da Requisição e da Nota Fiscal nos campos acima e clique fora para processar.")
+    st.info("Cole a Requisição e a Nota Fiscal acima para processar.")
